@@ -46,6 +46,10 @@
 #include "rtl-sdr.h"
 #include "anet.h"
 
+#define LG_SECURITY_ENHANCEMENT
+#define LG_SECURITY_ENHANCEMENT_TLS
+#include "TLSsample/tls.h"
+
 #define MODES_DEFAULT_RATE         2000000
 #define MODES_DEFAULT_FREQ         1090000000
 #define MODES_DEFAULT_WIDTH        1000
@@ -84,6 +88,10 @@
 #define MODES_INTERACTIVE_TTL 60                /* TTL before being removed */
 
 #define MODES_NET_MAX_FD 1024
+#ifdef LG_SECURITY_ENHANCEMENT_TLS
+// 4343
+#define MODES_NET_OUTPUT_TLSBS_PORT TLS_SERVER_PORT
+#endif
 #define MODES_NET_OUTPUT_SBS_PORT 30003
 #define MODES_NET_OUTPUT_RAW_PORT 30002
 #define MODES_NET_INPUT_RAW_PORT 30001
@@ -147,7 +155,14 @@ struct {
     /* Networking */
     char aneterr[ANET_ERR_LEN];
     struct client *clients[MODES_NET_MAX_FD]; /* Our clients. */
+#ifdef LG_SECURITY_ENHANCEMENT_TLS
+    SSL_CTX *ctx;
+    SSL *ssl[MODES_NET_MAX_FD]; /* SSL **/
+#endif
     int maxfd;                      /* Greatest fd currently active. */
+#ifdef LG_SECURITY_ENHANCEMENT_TLS
+    int tlsbsos; /* TLS-SBS output listening socket. */
+#endif
     int sbsos;                      /* SBS output listening socket. */
     int ros;                        /* Raw output listening socket. */
     int ris;                        /* Raw input listening socket. */
@@ -184,6 +199,9 @@ struct {
     long long stat_two_bits_fix;
     long long stat_http_requests;
     long long stat_sbs_connections;
+#ifdef LG_SECURITY_ENHANCEMENT_TLS
+    long long stat_tlsbs_connections;
+#endif
     long long stat_out_of_phase;
 } Modes;
 
@@ -1916,7 +1934,14 @@ void snipMode(int level) {
 #define MODES_NET_SERVICE_RAWI 1
 #define MODES_NET_SERVICE_HTTP 2
 #define MODES_NET_SERVICE_SBS 3
+
+#ifdef LG_SECURITY_ENHANCEMENT_TLS
+#define MODES_NET_SERVICES_TLSBS 4
+#define MODES_NET_SERVICES_NUM 5
+#else
 #define MODES_NET_SERVICES_NUM 4
+#endif
+
 struct {
     char *descr;
     int *socket;
@@ -1926,6 +1951,10 @@ struct {
     {"Raw TCP input", &Modes.ris, MODES_NET_INPUT_RAW_PORT},
     {"HTTP server", &Modes.https, MODES_NET_HTTP_PORT},
     {"Basestation TCP output", &Modes.sbsos, MODES_NET_OUTPUT_SBS_PORT}
+#ifdef LG_SECURITY_ENHANCEMENT_TLS
+    ,
+    {"Basestation TCP output", &Modes.tlsbsos, MODES_NET_OUTPUT_TLSBS_PORT}
+#endif
 };
 
 /* Networking "stack" initialization. */
@@ -1937,6 +1966,9 @@ void modesInitNet(void) {
 
     for (j = 0; j < MODES_NET_SERVICES_NUM; j++) {
         int s = anetTcpServer(Modes.aneterr, modesNetServices[j].port, NULL);
+#ifdef LG_SECURITY_ENHANCEMENT_TLS
+        printf("modesInitNet server[%d] port[%d]\n", j, modesNetServices[j].port);
+#endif
         if (s == -1) {
             fprintf(stderr, "Error opening the listening port %d (%s): %s\n",
                 modesNetServices[j].port,
@@ -1948,6 +1980,9 @@ void modesInitNet(void) {
         *modesNetServices[j].socket = s;
     }
 
+#ifdef LG_SECURITY_ENHANCEMENT_TLS
+    Modes.ctx = myInitSSL();
+#endif
     signal(SIGPIPE, SIG_IGN);
 }
 
@@ -1985,6 +2020,24 @@ void modesAcceptClients(void) {
         if (Modes.maxfd < fd) Modes.maxfd = fd;
         if (*modesNetServices[j].socket == Modes.sbsos)
             Modes.stat_sbs_connections++;
+#ifdef LG_SECURITY_ENHANCEMENT_TLS
+        if (*modesNetServices[j].socket == Modes.tlsbsos)
+        {
+            int iRet;
+            Modes.stat_tlsbs_connections++;
+            iRet = myAcceptSSL(Modes.ctx, fd, &Modes.ssl[fd]);
+            printf("myAcceptSS(%p, fd=%d, ssl[%d]=%p) return %d\n", Modes.ctx, fd, fd, Modes.ssl[fd], iRet);
+            if (iRet <= 0)
+            {
+                fprintf(stderr, "SSL_accept failed\n");
+                ERR_print_errors_fp(stderr);
+            }
+            else
+            {
+                printf("TLS connection established.\n");
+            }
+        }
+#endif
 
         j--; /* Try again with the same listening port. */
 
@@ -2026,7 +2079,19 @@ void modesSendAllClients(int service, void *msg, int len) {
     for (j = 0; j <= Modes.maxfd; j++) {
         c = Modes.clients[j];
         if (c && c->service == service) {
+#ifdef LG_SECURITY_ENHANCEMENT_TLS
+            int nwritten;
+            if (service == Modes.tlsbsos)
+            {
+                nwritten = SSL_write(Modes.ssl[j], msg, len);
+            }
+            else
+            {
+                nwritten = write(j, msg, len);
+            }
+#else
             int nwritten = write(j, msg, len);
+#endif
             if (nwritten != len) {
                 modesFreeClient(j);
             }
@@ -2102,6 +2167,9 @@ void modesSendSBSOutput(struct modesMessage *mm, struct aircraft *a) {
 
     *p++ = '\n';
     modesSendAllClients(Modes.sbsos, msg, p-msg);
+#ifdef LG_SECURITY_ENHANCEMENT_TLS
+    modesSendAllClients(Modes.tlsbsos, msg, p - msg);
+#endif
 }
 
 /* Turn an hex digit into its 4 bit decimal value.
