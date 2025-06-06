@@ -1,8 +1,8 @@
-#ifndef __ENLOG_H__
-#define __ENLOG_H__
+#ifndef __SQLOG_H__
+#define __SQLOG_H__
 
 #define LOG_FILE_BASE_NAME "dump1090.log"
-#define LOG_FILE_PATH "./"
+#define LOG_FILE_PATH "/etc/ssl/dump1090/"
 #define LOG_FILE_SIZE (1024 * 1024) // 1MB
 
 #define LOG_KEY_FILE_NAME "lgess2025s4rpilogkey.hex"
@@ -13,8 +13,8 @@
 #define LOG_AES_GCM_TAG_LEN 16 // 128-bit tag
 
 // Max formatted log message size
-#define ENLOG_BUFFER_SIZE 1024
-#define ENLOG_LINE_MAX 256
+#define SQLOG_BUFFER_SIZE 1024
+#define SQLOG_LINE_MAX 256
 
 int InitLogFromFile(const char *key_file);
 int WriteLog(const char *message);
@@ -40,4 +40,4 @@ int EnLog(int log_level, const char *format, ...);
 #define EnLog_D(...) EnLog(LOG_LEVEL_D, __VA_ARGS__)
 
 void EnLog_LogStart(int argc, char *argv[]);
-#endif // __ENLOG_H__
+#endif // __SQLOG_H__

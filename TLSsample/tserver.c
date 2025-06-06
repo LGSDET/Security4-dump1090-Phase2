@@ -9,7 +9,7 @@
 #include <openssl/err.h>
 
 #include "tls.h"
-#include "../enlog.h"
+#include "../sqlog.h"
 
 SSL_CTX *myInitSSL(void);
 int myFreeSSL(SSL_CTX *ctx, SSL *ssl);

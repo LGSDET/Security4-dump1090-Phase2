@@ -9,7 +9,7 @@
 #include <stdarg.h>
 #include <unistd.h>
 
-#include "enlog.h"
+#include "sqlog.h"
 
 static unsigned char g_key[LOG_AES_KEY_LEN];
 static FILE *g_log_fp = NULL;
@@ -241,8 +241,8 @@ int WriteLog(const char *message)
 
 int EnLog(int log_level, const char *format, ...)
 {
-    char msg_buffer[ENLOG_BUFFER_SIZE];
-    char final_buffer[ENLOG_BUFFER_SIZE];
+    char msg_buffer[SQLOG_BUFFER_SIZE];
+    char final_buffer[SQLOG_BUFFER_SIZE];
     const char *level_str = NULL;
     va_list args;
 
@@ -304,19 +304,19 @@ int EnLog(int log_level, const char *format, ...)
         final_buffer[sizeof(final_buffer) - 1] = '\0';
     }
 
-    // Split into chunks of ENLOG_LINE_MAX and call WriteLog
+    // Split into chunks of SQLOG_LINE_MAX and call WriteLog
     size_t len = strlen(final_buffer);
     size_t offset = 0;
 
     while (offset < len)
     {
-        size_t chunk_size = ENLOG_LINE_MAX;
+        size_t chunk_size = SQLOG_LINE_MAX;
         if (offset + chunk_size > len)
         {
             chunk_size = len - offset;
         }
 
-        char chunk[ENLOG_LINE_MAX + 1];
+        char chunk[SQLOG_LINE_MAX + 1];
         memcpy(chunk, final_buffer + offset, chunk_size);
         chunk[chunk_size] = '\0';
 
@@ -329,8 +329,8 @@ int EnLog(int log_level, const char *format, ...)
 #else
 int EnLog(int log_level, const char *format, ...)
 {
-    char msg_buffer[ENLOG_BUFFER_SIZE];
-    char final_buffer[ENLOG_BUFFER_SIZE];
+    char msg_buffer[SQLOG_BUFFER_SIZE];
+    char final_buffer[SQLOG_BUFFER_SIZE];
     const char *level_str = NULL;
     va_list args;
 
@@ -391,13 +391,13 @@ int EnLog(int log_level, const char *format, ...)
 
     while (offset < len)
     {
-        size_t chunk_size = ENLOG_LINE_MAX;
+        size_t chunk_size = SQLOG_LINE_MAX;
         if (offset + chunk_size > len)
         {
             chunk_size = len - offset;
         }
 
-        char chunk[ENLOG_LINE_MAX + 1];
+        char chunk[SQLOG_LINE_MAX + 1];
         memcpy(chunk, final_buffer + offset, chunk_size);
         chunk[chunk_size] = '\0';
 

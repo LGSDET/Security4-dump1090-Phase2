@@ -6,7 +6,7 @@
 #include <openssl/bio.h>
 #include <openssl/buffer.h>
 
-#include "enlog.h"
+#include "sqlog.h"
 
 // Base64 디코딩 함수
 static int base64_decode(const char *in, unsigned char *out, size_t *out_len)

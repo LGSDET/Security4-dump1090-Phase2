@@ -49,8 +49,8 @@
 #define LG_SECURITY_ENHANCEMENT
 #define LG_SECURITY_ENHANCEMENT_TLS
 #include "TLSsample/tls.h"
-#define LG_SECURITY_ENHANCEMENT_ENLOG
-#include "enlog.h"
+#define LG_SECURITY_ENHANCEMENT_SQLOG
+#include "sqlog.h"
 
 #define MODES_DEFAULT_RATE         2000000
 #define MODES_DEFAULT_FREQ         1090000000
@@ -2576,7 +2576,7 @@ int main(int argc, char **argv) {
 
     /* Set sane defaults. */
     modesInitConfig();
-#ifdef LG_SECURITY_ENHANCEMENT_ENLOG
+#ifdef LG_SECURITY_ENHANCEMENT_SQLOG
      if (InitLogFromFile(LOG_KEY_FILE_PATH LOG_KEY_FILE_NAME) != 0) {
         fprintf(stderr, "InitLog failed\n");
         return 1;

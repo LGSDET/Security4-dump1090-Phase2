@@ -8,7 +8,7 @@
 #include <sys/stat.h>
 #include <stdarg.h>
 
-#include "enlog.h"
+#include "sqlog.h"
 
 int main()
 {
