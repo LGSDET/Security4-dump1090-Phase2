@@ -9,6 +9,7 @@
 #include <openssl/err.h>
 
 #include "tls.h"
+#include "../enlog.h"
 
 SSL_CTX *myInitSSL(void);
 int myFreeSSL(SSL_CTX *ctx, SSL *ssl);
@@ -51,22 +52,37 @@ myInitSSL(void)
     return ctx;
 }
 
-int
-myAcceptSSL (SSL_CTX *ctx, int client_sock, SSL **ppSsl)
+int myAcceptSSL(SSL_CTX *ctx, int client_sock, SSL **ppSsl)
 {
-    int iRet, iRetry=100;
+    int iRet, iRetry = 100, iErr;
     *ppSsl = SSL_new(ctx);
     SSL_set_fd(*ppSsl, client_sock);
 
+#if 1 // for logging
+    struct sockaddr_in addr;
+    socklen_t addr_len = sizeof(addr);
+    char ip_str[INET_ADDRSTRLEN] = "unknown";
+    int port = 0;
+
+    if (getpeername(client_sock, (struct sockaddr *)&addr, &addr_len) == 0)
+    {
+        inet_ntop(AF_INET, &addr.sin_addr, ip_str, sizeof(ip_str));
+        port = ntohs(addr.sin_port);
+    }
+#endif
+
     printf("Performing SSL_accept... for client_socket[%d]\n", client_sock);
-    while(iRetry > 0)
+    while (iRetry > 0)
     {
         iRet = SSL_accept(*ppSsl);
-        if (iRet <= 0) {
-            int err = SSL_get_error(*ppSsl, iRet);
-            fprintf(stderr, "SSL_accept failed with return code %d, SSL_get_error: %d\n", iRet, err);
-            ERR_print_errors_fp(stderr);  // 핵심 디버깅
-        } else {
+        if (iRet <= 0)
+        {
+            iErr = SSL_get_error(*ppSsl, iRet);
+            fprintf(stderr, "SSL_accept failed with return code %d, SSL_get_error: %d\n", iRet, iErr);
+            ERR_print_errors_fp(stderr);
+        }
+        else
+        {
             printf("succeeded\n");
             break;
         }
@@ -74,6 +90,18 @@ myAcceptSSL (SSL_CTX *ctx, int client_sock, SSL **ppSsl)
         iRetry--;
         printf("retry %d left\n", iRetry);
     }
+#ifndef TLS_TEST
+    if (iRet <= 0)
+    {
+        EnLog_I("SSL_accept fail %s:%d with return %d, SSL_get_error %d\n",
+                ip_str, port, iRet, iErr);
+    }
+    else
+    {
+        EnLog_I("SSL_accept success %s:%d with return %d\n",
+                ip_str, port, iRet);
+    }
+#endif
     return iRet;
 }
 
@@ -84,7 +112,7 @@ int main(int argc, char *argv[])
 
     if (argc >= 2)
         tls_server_port = atoi(argv[1]);
-        
+
     printf("tls server opens %d\n", tls_server_port);
 
     signal(SIGPIPE, SIG_IGN);

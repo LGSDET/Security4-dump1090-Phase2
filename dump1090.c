@@ -49,6 +49,8 @@
 #define LG_SECURITY_ENHANCEMENT
 #define LG_SECURITY_ENHANCEMENT_TLS
 #include "TLSsample/tls.h"
+#define LG_SECURITY_ENHANCEMENT_ENLOG
+#include "enlog.h"
 
 #define MODES_DEFAULT_RATE         2000000
 #define MODES_DEFAULT_FREQ         1090000000
@@ -2574,7 +2576,14 @@ int main(int argc, char **argv) {
 
     /* Set sane defaults. */
     modesInitConfig();
-
+#ifdef LG_SECURITY_ENHANCEMENT_ENLOG
+     if (InitLogFromFile(LOG_KEY_FILE_PATH LOG_KEY_FILE_NAME) != 0) {
+        fprintf(stderr, "InitLog failed\n");
+        return 1;
+     } else {
+         EnLog_LogStart(argc, argv);
+     }
+#endif
     /* Parse the command line options */
     for (j = 1; j < argc; j++) {
         int more = j+1 < argc; /* There are more arguments. */
