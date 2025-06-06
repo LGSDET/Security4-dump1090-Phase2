@@ -239,7 +239,7 @@ int WriteLog(const char *message)
 #include <time.h>
 #include <sys/time.h>
 
-int EnLog(int log_level, const char *format, ...)
+int SqLog(int log_level, const char *format, ...)
 {
     char msg_buffer[SQLOG_BUFFER_SIZE];
     char final_buffer[SQLOG_BUFFER_SIZE];
@@ -327,7 +327,7 @@ int EnLog(int log_level, const char *format, ...)
     return 0;
 }
 #else
-int EnLog(int log_level, const char *format, ...)
+int SqLog(int log_level, const char *format, ...)
 {
     char msg_buffer[SQLOG_BUFFER_SIZE];
     char final_buffer[SQLOG_BUFFER_SIZE];
@@ -409,7 +409,7 @@ int EnLog(int log_level, const char *format, ...)
 }
 #endif
 
-void EnLog_LogStart(int argc, char *argv[])
+void SqLog_LogStart(int argc, char *argv[])
 {
 #if 0
     // 1. 시간 구하기
@@ -441,7 +441,7 @@ void EnLog_LogStart(int argc, char *argv[])
     }
 
     // 로그 출력 (예: 파일 대신 stdout)
-    EnLog_I("Newly started\n");
-    EnLog_I("Executable Path: %s\n", exe_path);
-    EnLog_I("Command Line: %s\n", cmdline);
+    SqLog_I("Newly started\n");
+    SqLog_I("Executable Path: %s\n", exe_path);
+    SqLog_I("Command Line: %s\n", cmdline);
 }

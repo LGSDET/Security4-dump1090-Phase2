@@ -54,22 +54,10 @@ myInitSSL(void)
 
 int myAcceptSSL(SSL_CTX *ctx, int client_sock, SSL **ppSsl)
 {
-    int iRet, iRetry = 100, iErr;
+    int iRet, iRetry = 10, iErr;
     *ppSsl = SSL_new(ctx);
     SSL_set_fd(*ppSsl, client_sock);
 
-#if 1 // for logging
-    struct sockaddr_in addr;
-    socklen_t addr_len = sizeof(addr);
-    char ip_str[INET_ADDRSTRLEN] = "unknown";
-    int port = 0;
-
-    if (getpeername(client_sock, (struct sockaddr *)&addr, &addr_len) == 0)
-    {
-        inet_ntop(AF_INET, &addr.sin_addr, ip_str, sizeof(ip_str));
-        port = ntohs(addr.sin_port);
-    }
-#endif
 
     printf("Performing SSL_accept... for client_socket[%d]\n", client_sock);
     while (iRetry > 0)
@@ -90,18 +78,7 @@ int myAcceptSSL(SSL_CTX *ctx, int client_sock, SSL **ppSsl)
         iRetry--;
         printf("retry %d left\n", iRetry);
     }
-#ifndef TLS_TEST
-    if (iRet <= 0)
-    {
-        EnLog_I("SSL_accept fail %s:%d with return %d, SSL_get_error %d\n",
-                ip_str, port, iRet, iErr);
-    }
-    else
-    {
-        EnLog_I("SSL_accept success %s:%d with return %d\n",
-                ip_str, port, iRet);
-    }
-#endif
+
     return iRet;
 }
 

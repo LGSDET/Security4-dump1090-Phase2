@@ -5,7 +5,8 @@
 #include <openssl/err.h>
 
 //#define TLS_SERVER_PORT 4433
-#define TLS_SERVER_PORT 30004
+#define TLS_SERVER_PORT     30004
+#define TLS_SERVER_PORT_RAW 30005
 
 #define USE_LOCALHOST_CERT 0
 

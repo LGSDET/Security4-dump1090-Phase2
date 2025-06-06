@@ -24,11 +24,11 @@ int main()
         snprintf(msg, sizeof(msg), "Log entry %d: Hello world!\n", i);
         WriteLog(msg);
     }
-    EnLog_F("%s:%d\n", __func__, __LINE__);
-    EnLog_E("%s:%d\n", __func__, __LINE__);
-    EnLog_W("%s:%d\n", __func__, __LINE__);
-    EnLog_I("%s:%d\n", __func__, __LINE__);
-    EnLog_D("%s:%d\n", __func__, __LINE__);
+    SqLog_F("%s:%d\n", __func__, __LINE__);
+    SqLog_E("%s:%d\n", __func__, __LINE__);
+    SqLog_W("%s:%d\n", __func__, __LINE__);
+    SqLog_I("%s:%d\n", __func__, __LINE__);
+    SqLog_D("%s:%d\n", __func__, __LINE__);
 
     return 0;
 }

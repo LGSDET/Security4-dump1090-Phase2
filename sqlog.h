@@ -29,15 +29,15 @@ typedef enum
     LOG_LEVEL_D      // DEBUG
 } LOG_LEVEL;
 
-// Declaration of EnLog function
-int EnLog(int log_level, const char *format, ...);
+// Declaration of SqLog function
+int SqLog(int log_level, const char *format, ...);
 
 // Convenience macros for each log level (support variadic args)
-#define EnLog_F(...) EnLog(LOG_LEVEL_F, __VA_ARGS__)
-#define EnLog_E(...) EnLog(LOG_LEVEL_E, __VA_ARGS__)
-#define EnLog_W(...) EnLog(LOG_LEVEL_W, __VA_ARGS__)
-#define EnLog_I(...) EnLog(LOG_LEVEL_I, __VA_ARGS__)
-#define EnLog_D(...) EnLog(LOG_LEVEL_D, __VA_ARGS__)
+#define SqLog_F(...) SqLog(LOG_LEVEL_F, __VA_ARGS__)
+#define SqLog_E(...) SqLog(LOG_LEVEL_E, __VA_ARGS__)
+#define SqLog_W(...) SqLog(LOG_LEVEL_W, __VA_ARGS__)
+#define SqLog_I(...) SqLog(LOG_LEVEL_I, __VA_ARGS__)
+#define SqLog_D(...) SqLog(LOG_LEVEL_D, __VA_ARGS__)
 
-void EnLog_LogStart(int argc, char *argv[]);
+void SqLog_LogStart(int argc, char *argv[]);
 #endif // __SQLOG_H__
