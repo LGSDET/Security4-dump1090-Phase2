@@ -23,20 +23,20 @@ sqlog_test_suite: sqlog_test sqlog_viewer
 sqlog_test: sqlog_test.o sqlog.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
+sqlog_viewer: sqlog_viewer.o sqlog.o
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(LDLIBS)
+
 sqlog.o: sqlog.c sqlog.h
 	$(CC) $(CFLAGS) -c -o $@ $<
-
-#sqlog_test.o: sqlog.c sqlog.h
-#	$(CC) -DSQLOG_TEST $(CFLAGS) -c -o $@ $<
-
-sqlog_viewer: sqlog_viewer.o sqlog.h
-	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS) $(LDLIBS)
 
 sqlog_viewer.o: sqlog_viewer.c sqlog.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 lgess2025s4rpilogkey:
 	openssl rand -hex 32 > lgess2025s4rpilogkey.hex
+
+lgess2025s4testlogkey:
+	openssl rand -hex 32 > lgess2025s4testlogkey.hex
 
 distclean: clean
 	rm -f dump1090 sqlog_test sqlog_viewer

@@ -2686,13 +2686,17 @@ int main(int argc, char **argv) {
     /* Set sane defaults. */
     modesInitConfig();
 #ifdef LG_SECURITY_ENHANCEMENT_SQLOG
-     if (InitLogFromFile(LOG_KEY_FILE_PATH LOG_KEY_FILE_NAME) != 0) {
+    if (SqLog_InitWriting(LOG_KEY_FILE_PATH LOG_KEY_FILE_NAME,
+                          LOG_FILE_PATH, LOG_FILE_BASE_NAME) != 0)
+    {
         fprintf(stderr, "InitLog failed\n");
         return 1;
-     } else {
+    }
+    else
+    {
         SqLog_LogStart(argc, argv);
         SqLog_setup_signal_handlers();
-     }
+    }
 #endif
     /* Parse the command line options */
     for (j = 1; j < argc; j++) {

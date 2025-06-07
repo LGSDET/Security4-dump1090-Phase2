@@ -16,9 +16,6 @@
 #define SQLOG_BUFFER_SIZE 1024
 #define SQLOG_LINE_MAX 256
 
-int InitLogFromFile(const char *key_file);
-int WriteLog(const char *message);
-
 // Log level enum
 typedef enum
 {
@@ -39,5 +36,10 @@ int SqLog(int log_level, const char *format, ...);
 #define SqLog_I(...) SqLog(LOG_LEVEL_I, __VA_ARGS__)
 #define SqLog_D(...) SqLog(LOG_LEVEL_D, __VA_ARGS__)
 
-void SqLog_LogStart(int argc, char *argv[]);
+int     SqLog_InitWriting(const char *key_file, const char *logf_path, const char *logf_name);
+void    SqLog_LogStart(int argc, char *argv[]);
+int     Sqlog_WriteLog(const char *message);
+
+int     SqLog_InitReading(const char *key_file);
+int     SqLog_ReadLog(const char*, size_t, char *, size_t);
 #endif // __SQLOG_H__

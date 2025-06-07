@@ -12,7 +12,8 @@
 
 int main()
 {
-    if (InitLogFromFile(LOG_KEY_FILE_PATH LOG_KEY_FILE_NAME) != 0)
+    if (SqLog_InitWriting("./lgess2025s4testlogkey.hex",
+                          "./", "test.log") != 0)
     {
         fprintf(stderr, "InitLog failed\n");
         return 1;
