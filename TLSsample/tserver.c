@@ -31,7 +31,7 @@ myInitSSL(void)
         exit(EXIT_FAILURE);
     }
 
-    // SonarQube Security Issue
+    // SonarQube Security Issue: Stronger Protocol
     SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
 
     // 서버 인증서와 개인키 로드

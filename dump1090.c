@@ -2115,33 +2115,21 @@ void modesAcceptClients(void) {
 /* On error free the client, collect the structure, adjust maxfd if needed. */
 void modesFreeClient(int fd) {
 #ifdef LG_SECURITY_ENHANCEMENT_SQLOG
-    struct sockaddr_in client_addr, server_addr;
+    struct sockaddr_in server_addr;
     socklen_t addr_len = sizeof(struct sockaddr_in);
-    char ip_str[INET_ADDRSTRLEN] = "unknown";
 
-    if (getpeername(fd, (struct sockaddr *)&client_addr, &addr_len) == 0)
-    {
-        inet_ntop(AF_INET, &client_addr.sin_addr, ip_str, sizeof(ip_str));
-    }
-    else
-    {
-        SqLog_I("getpeername() failed\n");
-    }
+    // getpeername() always failed because that is already disconnected.
 
     if (getsockname(fd, (struct sockaddr *)&server_addr, &addr_len) == 0)
     {
-        inet_ntop(AF_INET, &client_addr.sin_addr, ip_str, sizeof(ip_str));
+        // nothing to do. server.addr.sin_port is enough.
     }
     else
     {
         SqLog_I("getsockname() failed\n");
     }
 
-    SqLog_I("Closing fd=%d, %d <= %s:%d\n",
-            fd,
-            ntohs(server_addr.sin_port),
-            ip_str,
-            ntohs(client_addr.sin_port));
+    SqLog_I("Closing fd=%d, %d\n", fd, ntohs(server_addr.sin_port));
 #endif
 
 #ifdef LG_SECURITY_ENHANCEMENT_TLS
@@ -2445,8 +2433,13 @@ int handleHTTPRequest(struct client *c) {
         struct stat sbuf;
         int fd = -1;
 
+#if 0 // SonarQube Security Issue: TOCTOU
         if (stat("gmap.html",&sbuf) != -1 &&
             (fd = open("gmap.html",O_RDONLY)) != -1)
+#else
+        if ( ((fd = open("gmap.html",O_RDONLY)) != -1) &&
+            (fstat(fd,&sbuf) != -1 ) )
+#endif
         {
             content = malloc(sbuf.st_size);
             if (read(fd,content,sbuf.st_size) == -1) {
