@@ -282,6 +282,7 @@ static long long mstime(void) {
 void on_terminate(int signum) {
     const char *sig_name = strsignal(signum);
     SqLog(LOG_LEVEL_I, "Terminating by signal %d (%s)\n", signum, sig_name ? sig_name : "unknown");
+    SqLog_CloseFiles();
     exit(0);  // clean exit
 }
 void SqLog_setup_signal_handlers() {

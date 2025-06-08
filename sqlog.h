@@ -5,6 +5,8 @@
 #define LOG_FILE_PATH "/etc/ssl/dump1090/"
 #define LOG_FILE_SIZE (1024 * 1024) // 1MB
 
+#define LOG_FILE_HASH_EXT ".cs"
+
 #define LOG_KEY_FILE_NAME "lgess2025s4rpilogkey.hex"
 #define LOG_KEY_FILE_PATH "/etc/ssl/dump1090/"
 
@@ -36,10 +38,13 @@ int SqLog(int log_level, const char *format, ...);
 #define SqLog_I(...) SqLog(LOG_LEVEL_I, __VA_ARGS__)
 #define SqLog_D(...) SqLog(LOG_LEVEL_D, __VA_ARGS__)
 
-int     SqLog_InitWriting(const char *key_file, const char *logf_path, const char *logf_name);
-void    SqLog_LogStart(int argc, char *argv[]);
-int     Sqlog_WriteLog(const char *message);
+int SqLog_InitWriting(const char *key_file, const char *logf_path, const char *logf_name);
+void SqLog_LogStart(int argc, char *argv[]);
+int Sqlog_WriteLog(const char *message);
+void SqLog_CloseFiles(void);
+int SqLog_VerifyIntegrity(const char *log_file_path);
+int WriteLog(const char *message);
 
-int     SqLog_InitReading(const char *key_file);
-int     SqLog_ReadLog(const char*, size_t, char *, size_t);
+int SqLog_InitReading(const char *key_file);
+int SqLog_ReadLog(const char *, size_t, char *, size_t);
 #endif // __SQLOG_H__
