@@ -54,6 +54,7 @@
 #include <arpa/inet.h>    // inet_pton(), inet_ntop(), etc.
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#define LG_SECURITY_ENHANCEMENT_ONLY_SECURE_PORTS
 
 #define MODES_DEFAULT_RATE         2000000
 #define MODES_DEFAULT_FREQ         1090000000
@@ -1986,9 +1987,21 @@ void modesInitNet(void) {
     Modes.maxfd = -1;
 
     for (j = 0; j < MODES_NET_SERVICES_NUM; j++) {
+#ifdef LG_SECURITY_ENHANCEMENT_ONLY_SECURE_PORTS
+        int s;
+
+        if ((modesNetServices[j].socket == &Modes.tlros) || (modesNetServices[j].socket == &Modes.tlsbsos))
+        {
+            SqLog_I("modesInitNet server[%d] port[%d]\n", j, modesNetServices[j].port);
+            s = anetTcpServer(Modes.aneterr, modesNetServices[j].port, NULL);
+        }
+        else
+        {
+            s = anetTcpServer(Modes.aneterr, modesNetServices[j].port, "127.0.0.1");
+            SqLog_I("modesInitNet server[%d] port[%d] only for internally\n", j, modesNetServices[j].port);
+        }
+#else
         int s = anetTcpServer(Modes.aneterr, modesNetServices[j].port, NULL);
-#ifdef LG_SECURITY_ENHANCEMENT_TLS
-        printf("modesInitNet server[%d] port[%d]\n", j, modesNetServices[j].port);
 #endif
         if (s == -1) {
             fprintf(stderr, "Error opening the listening port %d (%s): %s\n",
