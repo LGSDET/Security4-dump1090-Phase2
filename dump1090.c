@@ -53,7 +53,7 @@
 #define LG_SECURITY_ENHANCEMENT_ONLY_SECURE_PORTS
 //#define LG_SECURITY_USE_EXT_SBS_THREAD
 
-#define LG_VERSION_STRING   "1.0.0"
+#define LG_VERSION_STRING   "1.0.1" // Sha-256-> HMAC to verify log integrity
 
 #ifdef LG_SECURITY_ENHANCEMENT_SQLOG
 #include "sqlog.h"

@@ -5,7 +5,7 @@
 #define LOG_FILE_PATH "/etc/ssl/dump1090/"
 #define LOG_FILE_SIZE (1024 * 1024) // 1MB
 
-#define LOG_FILE_HASH_EXT ".cs"
+#define LOG_FILE_HASH_EXT ".hmac"
 
 #define LOG_KEY_FILE_NAME "lgess2025s4rpilogkey.hex"
 #define LOG_KEY_FILE_PATH "/etc/ssl/dump1090/"

@@ -1,7 +1,7 @@
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <openssl/buffer.h>
-#include <openssl/sha.h>
+#include <openssl/hmac.h>
 #include <dirent.h>
 #include <stdio.h>
 #include <string.h>
@@ -25,15 +25,14 @@ static const char *g_log_file_base_name = LOG_FILE_BASE_NAME;
 
 static int hex_to_bin(const char *hex, unsigned char *bin, size_t bin_len);
 static int load_key(const char *pcFile, unsigned char *pKeyBuf);
-static int base64_encode(const unsigned char *in, size_t in_len, char *out, size_t out_len);
-static int base64_decode(const char *in, unsigned char *out, size_t *out_len);
+static int base64_encode(const unsigned char *in, size_t in_len, char *out, const unsigned int out_len);
+static int base64_decode(const char *in, unsigned char *out, unsigned int *out_len);
 static int decrypt_gcm(const unsigned char *key,
                        const unsigned char *data,
                        size_t data_len,
                        char *plaintext_out,
                        size_t plaintext_max);
-static int save_logfile_hash(void);
-static int compute_hash_evp(const unsigned char *data, size_t data_len, unsigned char *hash_out);
+static int save_logfile_hmac(void);
 
 // Rename current log to .NNN and start fresh
 static int rotate_log_file_if_needed(size_t new_entry_size);
@@ -84,7 +83,7 @@ int WriteLog(const char *message)
 
     // Base64 encode
     char encoded[2048];
-    if (base64_encode(combined, sizeof(combined), encoded, sizeof(encoded)) != 0)
+    if (base64_encode(combined, sizeof(combined), encoded, (unsigned int)sizeof(encoded)) != 0)
     {
         pthread_mutex_unlock(&mutex_WriteLog);
         return -1;
@@ -105,7 +104,7 @@ int WriteLog(const char *message)
     //printf("%s", numbered_msg);
 
     // Save full log file hash (not just last line)
-    if (save_logfile_hash() != 0)
+    if (save_logfile_hmac() != 0)
     {
         fprintf(stderr, "[!] Failed to write log file hash\n");
         // FIXME: handle failure
@@ -267,7 +266,7 @@ int SqLog_ReadLog(const char *pacCiperText, size_t szCLen,
                   char *pacPlainText, size_t szPLen)
 {
     unsigned char decoded[2048];
-    size_t decoded_len;
+    unsigned int decoded_len;
 
     (void)szCLen;
 
@@ -286,33 +285,31 @@ int SqLog_ReadLog(const char *pacCiperText, size_t szCLen,
     return 0;
 }
 
-// Verify log file integrity by checking hash
+// Verify log file integrity by checking hmac
 int SqLog_VerifyIntegrity(const char *log_file_path)
 {
     FILE *log_fp = NULL, *hash_fp = NULL;
     char hash_file_path[512];
     char hash_data_b64[512];
-    unsigned char hash_data_bin[128]; // IV(12) + Hash(32)
-    size_t hash_data_len;
-    unsigned char stored_iv[LOG_AES_GCM_IV_LEN];
-    unsigned char stored_hash[32]; // SHA-256
-    unsigned char computed_hash[32];
-    int result = -1;
+    unsigned char hash_data_bin[EVP_MAX_MD_SIZE];
+    unsigned int hash_data_len = 0;
+    unsigned char computed_hmac[EVP_MAX_MD_SIZE];
 
-    // Build .cs hash file path
+    // Build .hmac file path
     snprintf(hash_file_path, sizeof(hash_file_path), "%s%s", log_file_path, LOG_FILE_HASH_EXT);
 
     // Open log file
     log_fp = fopen(log_file_path, "rb");
     if (!log_fp)
     {
-        fprintf(stderr, "[!] Cannot open log file: %s\n", log_file_path);
+        fprintf(stderr, "[ERROR] Cannot open log file: %s\n", log_file_path);
         return -1;
     }
 
-    // Determine file size
+    // Get file size
     if (fseek(log_fp, 0, SEEK_END) != 0)
     {
+        fprintf(stderr, "[ERROR] fseek failed on log file\n");
         fclose(log_fp);
         return -2;
     }
@@ -320,111 +317,93 @@ int SqLog_VerifyIntegrity(const char *log_file_path)
     long file_size_long = ftell(log_fp);
     if (file_size_long <= 0)
     {
+        fprintf(stderr, "[ERROR] Invalid log file size\n");
         fclose(log_fp);
         return -3;
     }
-    size_t file_size = (size_t)file_size_long;
 
+    size_t file_size = (size_t)file_size_long;
     rewind(log_fp);
 
-    // Read entire file content
+    // Allocate buffer and read log file
     unsigned char *file_data = malloc(file_size);
     if (!file_data)
     {
+        fprintf(stderr, "[ERROR] Memory allocation failed\n");
         fclose(log_fp);
         return -4;
     }
 
     if (fread(file_data, 1, file_size, log_fp) != file_size)
     {
+        fprintf(stderr, "[ERROR] Failed to read log file contents\n");
         free(file_data);
         fclose(log_fp);
         return -5;
     }
     fclose(log_fp);
 
-    // Open and read .cs hash file
+    // Open and read .hmac hash file (HMAC base64)
     hash_fp = fopen(hash_file_path, "r");
     if (!hash_fp)
     {
-        fprintf(stderr, "[!] Cannot open hash file: %s\n", hash_file_path);
+        fprintf(stderr, "[ERROR] Cannot open hash file: %s\n", hash_file_path);
         free(file_data);
         return -6;
     }
 
+    // Read Base64-encoded HMAC
     if (!fgets(hash_data_b64, sizeof(hash_data_b64), hash_fp))
     {
-        fprintf(stderr, "[!] Failed to read hash file\n");
+        fprintf(stderr, "[ERROR] Failed to read hash data from file\n");
         fclose(hash_fp);
         free(file_data);
         return -7;
     }
     fclose(hash_fp);
 
-    // Strip newline
+    // Strip newline from Base64
     size_t b64_len = strlen(hash_data_b64);
     if (b64_len > 0 && hash_data_b64[b64_len - 1] == '\n')
-    {
         hash_data_b64[b64_len - 1] = '\0';
-    }
 
-    // Decode base64
+    // Decode Base64 -> binary
     hash_data_len = sizeof(hash_data_bin);
     if (base64_decode(hash_data_b64, hash_data_bin, &hash_data_len) != 0)
     {
-        fprintf(stderr, "[!] Failed to decode hash data\n");
+        fprintf(stderr, "[ERROR] Base64 decode of hash file failed\n");
         free(file_data);
         return -8;
     }
 
-    if (hash_data_len != sizeof(stored_iv) + sizeof(stored_hash))
+    // Compute HMAC
+    unsigned char *hmac_result = HMAC(
+        EVP_sha256(),
+        g_key, LOG_AES_KEY_LEN,
+        file_data, file_size,
+        computed_hmac, &hash_data_len);
+
+    if (!hmac_result)
     {
-        fprintf(stderr, "[!] Invalid hash file format\n");
+        fprintf(stderr, "[ERROR] HMAC computation failed\n");
         free(file_data);
         return -9;
     }
 
-    memcpy(stored_iv, hash_data_bin, sizeof(stored_iv));
-    memcpy(stored_hash, hash_data_bin + sizeof(stored_iv), sizeof(stored_hash));
-
-    // Compute SHA-256(IV + file_data)
-    unsigned char *combined_data = malloc(sizeof(stored_iv) + file_size);
-    if (!combined_data)
-    {
-        free(file_data);
-        return -10;
-    }
-
-    memcpy(combined_data, stored_iv, sizeof(stored_iv));
-    memcpy(combined_data + sizeof(stored_iv), file_data, file_size);
-
-    if (compute_hash_evp(combined_data, sizeof(stored_iv) + file_size, computed_hash) != 0)
-    {
-        fprintf(stderr, "[!] Failed to compute hash\n");
-        free(file_data);
-        free(combined_data);
-        return -11;
-    }
-
     free(file_data);
-    free(combined_data);
 
-    // Compare hashes
-    if (memcmp(stored_hash, computed_hash, sizeof(stored_hash)) == 0)
+    // Compare HMACs
+    if (hash_data_len == 32 && memcmp(hash_data_bin, computed_hmac, 32) == 0)
     {
-        printf("[✓] Log integrity verification PASSED for: %s\n", log_file_path);
-        result = 0;
+        return 0;
     }
     else
     {
-        printf("[✗] Log integrity verification FAILED for: %s\n", log_file_path);
-        printf("[!] WARNING: Log file may have been tampered with!\n");
-        result = -12;
+        fprintf(stderr, "[ERROR] Log integrity verification FAILED\n");
+        fprintf(stderr, "[WARNING] The log file may have been tampered with: %s\n", log_file_path);
+        return -10;
     }
-
-    return result;
 }
-
 // Close all open log-related files safely
 void SqLog_CloseFiles(void)
 {
@@ -519,7 +498,7 @@ static int open_new_log_file()
     return (g_log_fp) ? 0 : -1;
 }
 
-static int save_logfile_hash(void)
+static int save_logfile_hmac(void)
 {
     FILE *rfp = fopen(g_current_log_filename, "rb");
     if (!rfp)
@@ -560,47 +539,31 @@ static int save_logfile_hash(void)
         return -1;
     }
 
-    // Generate random IV
-    unsigned char iv[LOG_AES_GCM_IV_LEN];
-    if (RAND_bytes(iv, sizeof(iv)) != 1)
-    {
-        free(file_data);
-        return -1;
-    }
+    // Compute HMAC-SHA256 using g_key
+    unsigned char hmac[EVP_MAX_MD_SIZE];
+    unsigned int hmac_len = 0;
 
-    // Concatenate IV and file data
-    unsigned char *combined_data = malloc(sizeof(iv) + file_size);
-    if (!combined_data)
-    {
-        free(file_data);
-        return -1;
-    }
-    memcpy(combined_data, iv, sizeof(iv));
-    memcpy(combined_data + sizeof(iv), file_data, file_size);
+    unsigned char *hmac_result = HMAC(
+        EVP_sha256(),
+        g_key, LOG_AES_KEY_LEN,
+        file_data, file_size,
+        hmac, &hmac_len);
+
     free(file_data);
 
-    // Compute SHA-256 hash of (IV || log file contents)
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    if (compute_hash_evp(combined_data, sizeof(iv) + file_size, hash) != 0)
+    if (!hmac_result)
     {
-        free(combined_data);
         return -1;
     }
-    free(combined_data);
 
     // Build hash filename (e.g., logname.cs)
     char hash_filename[512];
     snprintf(hash_filename, sizeof(hash_filename), "%s%s%s",
              g_log_file_path, g_log_file_base_name, LOG_FILE_HASH_EXT);
 
-    // Compose IV + hash
-    unsigned char hash_data[sizeof(iv) + sizeof(hash)];
-    memcpy(hash_data, iv, sizeof(iv));
-    memcpy(hash_data + sizeof(iv), hash, sizeof(hash));
-
-    // Base64-encode the combined data
+    // Base64-encode the HMAC
     char hash_b64[256];
-    if (base64_encode(hash_data, sizeof(hash_data), hash_b64, sizeof(hash_b64)) != 0)
+    if (base64_encode(hmac, hmac_len, hash_b64, (unsigned int)sizeof(hash_b64)) != 0)
         return -1;
 
     FILE *hf = fopen(hash_filename, "w");
@@ -653,7 +616,7 @@ static int load_key(const char *pcFile, unsigned char *pKeyBuf)
 /** Base64 ************************************************** */
 /************************************************************ */
 
-static int base64_encode(const unsigned char *in, size_t in_len, char *out, size_t out_len)
+static int base64_encode(const unsigned char *in, size_t in_len, char *out, const unsigned int out_len)
 {
     BIO *bio, *b64;
     BUF_MEM *buffer_ptr;
@@ -680,7 +643,7 @@ static int base64_encode(const unsigned char *in, size_t in_len, char *out, size
     return 0;
 }
 
-static int base64_decode(const char *in, unsigned char *out, size_t *out_len)
+static int base64_decode(const char *in, unsigned char *out, unsigned int *out_len)
 {
     BIO *bio, *b64;
     int decoded_len;
@@ -697,7 +660,7 @@ static int base64_decode(const char *in, unsigned char *out, size_t *out_len)
         return -1;
     }
 
-    *out_len = decoded_len;
+    *out_len = (unsigned int)decoded_len;
     BIO_free_all(bio);
     return 0;
 }
@@ -711,67 +674,6 @@ static int hex_to_bin(const char *hex, unsigned char *bin, size_t bin_len)
             return -1;
     }
     return 0;
-}
-
-/************************************************************ */
-/** Hash computation using EVP interface ******************* */
-/************************************************************ */
-
-// Compute SHA-256 hash using OpenSSL 3.0 compatible EVP interface
-static int compute_hash_evp(const unsigned char *data, size_t data_len, unsigned char *hash_out)
-{
-    EVP_MD_CTX *mdctx = NULL;
-    const EVP_MD *md = NULL;
-    unsigned int hash_len = 0;
-    int result = -1;
-
-    // Create message digest context
-    mdctx = EVP_MD_CTX_new();
-    if (mdctx == NULL)
-    {
-        goto cleanup;
-    }
-
-    // Get SHA-256 algorithm
-    md = EVP_sha256();
-    if (md == NULL)
-    {
-        goto cleanup;
-    }
-
-    // Initialize digest operation
-    if (EVP_DigestInit_ex(mdctx, md, NULL) != 1)
-    {
-        goto cleanup;
-    }
-
-    // Update digest with data
-    if (EVP_DigestUpdate(mdctx, data, data_len) != 1)
-    {
-        goto cleanup;
-    }
-
-    // Finalize digest and get result
-    if (EVP_DigestFinal_ex(mdctx, hash_out, &hash_len) != 1)
-    {
-        goto cleanup;
-    }
-
-    // Verify hash length
-    if (hash_len != 32)
-    { // SHA-256 produces 32 bytes
-        goto cleanup;
-    }
-
-    result = 0; // Success
-
-cleanup:
-    if (mdctx != NULL)
-    {
-        EVP_MD_CTX_free(mdctx);
-    }
-
-    return result;
 }
 
 /************************************************************ */

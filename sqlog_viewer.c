@@ -64,56 +64,18 @@ int main(int argc, char *argv[])
 
     int integrity_result = SqLog_VerifyIntegrity(logfile);
 
-    switch (integrity_result)
+    if (integrity_result != 0)
     {
-    case 0:
-        break;
-    case -1:
-        fprintf(stderr, "[ERROR] Cannot open log file\n");
-        return 1;
-    case -2:
-        fprintf(stderr, "[ERROR] Log decryption failed - file may be corrupted\n");
-        if (!ask_user_confirmation("Continue reading anyway?"))
+        printf("[✗] Integrity check failed.\n");
+
+        if (!ask_user_confirmation("Continue reading the log anyway?"))
         {
             return 1;
         }
-        break;
-    case -3:
-        fprintf(stderr, "[ERROR] No valid log entries found\n");
-        if (!ask_user_confirmation("Continue anyway?"))
-        {
-            return 1;
-        }
-        break;
-    case -4:
-        fprintf(stderr, "[WARNING] Hash file not found - cannot verify integrity\n");
-        if (!ask_user_confirmation("Continue reading without integrity verification?"))
-        {
-            return 1;
-        }
-        break;
-    case -5:
-        fprintf(stderr, "[ERROR] Hash file corrupted\n");
-        if (!ask_user_confirmation("Continue reading anyway?"))
-        {
-            return 1;
-        }
-        break;
-    case -6:
-        fprintf(stderr, "[CRITICAL] Log integrity verification FAILED!\n");
-        fprintf(stderr, "[WARNING] The log file may have been tampered with!\n");
-        if (!ask_user_confirmation("Continue reading potentially compromised log?"))
-        {
-            return 1;
-        }
-        break;
-    default:
-        fprintf(stderr, "[ERROR] Unknown integrity check error (%d)\n", integrity_result);
-        if (!ask_user_confirmation("Continue anyway?"))
-        {
-            return 1;
-        }
-        break;
+    }
+    else
+    {
+        printf("[✓] Integrity check passed.\n");
     }
 
     // Read log file
