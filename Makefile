@@ -1,4 +1,5 @@
-CFLAGS?=-O2 -g -Wall -W $(shell pkg-config --cflags librtlsdr)
+#CFLAGS?=-O2 -g -Wall -W $(shell pkg-config --cflags librtlsdr)
+CFLAGS?=-O2 -Wall -W $(shell pkg-config --cflags librtlsdr)
 LDLIBS+=$(shell pkg-config --libs librtlsdr) -lpthread -lm
 #LG_SECURITY_ENHANCEMENT
 LDLIBS+=-lssl -lcrypto
@@ -10,8 +11,8 @@ all: dump1090 sqlog_viewer
 %.o: %.c
 	$(CC) $(CFLAGS) -c $<
 
-dump1090: dump1090.o anet.o tserver.o sqlog.o
-	$(CC) -g -o dump1090 dump1090.o anet.o tserver.o sqlog.o $(LDFLAGS) $(LDLIBS)
+dump1090: dump1090.o anet.o tserver.o sqlog.o # sbs_network_reader.o
+	$(CC) -g -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
 tserver.o: TLSsample/tserver.c TLSsample/tls.h
 	$(CC) $(CFLAGS) -c $<
@@ -30,6 +31,9 @@ sqlog.o: sqlog.c sqlog.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 sqlog_viewer.o: sqlog_viewer.c sqlog.h
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+sbs_network_reader.o: sbs_network_reader.c  sqlog.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 lgess2025s4rpilogkey:

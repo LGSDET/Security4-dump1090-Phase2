@@ -50,11 +50,17 @@
 #define LG_SECURITY_ENHANCEMENT_TLS
 #include "TLSsample/tls.h"
 #define LG_SECURITY_ENHANCEMENT_SQLOG
+#define LG_SECURITY_ENHANCEMENT_ONLY_SECURE_PORTS
+//#define LG_SECURITY_USE_EXT_SBS_THREAD
+
+#define LG_VERSION_STRING   "1.0.0"
+
+#ifdef LG_SECURITY_ENHANCEMENT_SQLOG
 #include "sqlog.h"
 #include <arpa/inet.h>    // inet_pton(), inet_ntop(), etc.
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#define LG_SECURITY_ENHANCEMENT_ONLY_SECURE_PORTS
+#endif
 
 #define MODES_DEFAULT_RATE         2000000
 #define MODES_DEFAULT_FREQ         1090000000
@@ -267,6 +273,12 @@ int modesMessageLenByType(int type);
 void sigWinchCallback();
 int getTermRows();
 
+#ifdef LG_SECURITY_USE_EXT_SBS_THREAD
+pthread_mutex_t mutex_modesSendAllClients = PTHREAD_MUTEX_INITIALIZER;
+pthread_t g_sbs_network_reader_thread;
+void *SbsNetworkReaderThread(void *);
+#endif
+
 /* ============================= Utility functions ========================== */
 
 static long long mstime(void) {
@@ -291,6 +303,7 @@ void SqLog_setup_signal_handlers() {
     signal(SIGINT,  on_terminate);  // Ctrl+C
     signal(SIGQUIT, on_terminate);  // kill -3
     signal(SIGHUP,  on_terminate);  // terminal closed
+    signal(SIGSEGV,  on_terminate);  // segmentation fault
     // Add more if needed
 }
 #endif
@@ -1998,7 +2011,7 @@ void modesInitNet(void) {
         else
         {
             s = anetTcpServer(Modes.aneterr, modesNetServices[j].port, "127.0.0.1");
-            SqLog_I("modesInitNet server[%d] port[%d] only for internally\n", j, modesNetServices[j].port);
+            SqLog_I("modesInitNet server[%d] port[%d] for local access\n", j, modesNetServices[j].port);
         }
 #else
         int s = anetTcpServer(Modes.aneterr, modesNetServices[j].port, NULL);
@@ -2188,10 +2201,21 @@ void modesFreeClient(int fd) {
     }
 }
 
+#ifdef LG_SECURITY_USE_EXT_SBS_THREAD
+int dump1090_get_tlsbsos(void)
+{
+    return Modes.tlsbsos;
+}
+#endif
+
 /* Send the specified message to all clients listening for a given service. */
 void modesSendAllClients(int service, void *msg, int len) {
     int j;
     struct client *c;
+
+#ifdef LG_SECURITY_USE_EXT_SBS_THREAD
+    pthread_mutex_lock(&mutex_modesSendAllClients);
+#endif
 
     for (j = 0; j <= Modes.maxfd; j++) {
         c = Modes.clients[j];
@@ -2201,19 +2225,33 @@ void modesSendAllClients(int service, void *msg, int len) {
             if ((service == Modes.tlsbsos) || (service == Modes.tlros))
             {
                 nwritten = SSL_write(Modes.ssl[j], msg, len);
+                if(nwritten <= 0)
+                {
+                    int err = SSL_get_error(Modes.ssl[j], nwritten);
+                    SqLog_E("SSL_write(fd=%d) failed: %d\n", j, err);
+                }
+                if (nwritten != len) {
+                    modesFreeClient(j);
+                }
             }
             else
             {
                 nwritten = write(j, msg, len);
+                if (nwritten != len) {
+                    modesFreeClient(j);
+                }
             }
 #else
             int nwritten = write(j, msg, len);
-#endif
             if (nwritten != len) {
                 modesFreeClient(j);
             }
+#endif
         }
     }
+#ifdef LG_SECURITY_USE_EXT_SBS_THREAD
+    pthread_mutex_unlock(&mutex_modesSendAllClients);
+#endif
 }
 
 /* Write raw output to TCP clients. */
@@ -2637,6 +2675,7 @@ int getTermRows() {
 
 void showHelp(void) {
     printf(
+        "ver: " LG_VERSION_STRING "\n"
 "--device-index <index>   Select RTL device (default: 0).\n"
 "--gain <db>              Set gain (default: max gain. Use -100 for auto-gain).\n"
 "--enable-agc             Enable the Automatic Gain Control (default: off).\n"
@@ -2709,6 +2748,7 @@ int main(int argc, char **argv) {
     else
     {
         SqLog_LogStart(argc, argv);
+        SqLog_I("ver %s\n", LG_VERSION_STRING);
         SqLog_setup_signal_handlers();
     }
 #endif
@@ -2822,6 +2862,9 @@ int main(int argc, char **argv) {
 
     /* Create the thread that will read the data from the device. */
     pthread_create(&Modes.reader_thread, NULL, readerThreadEntryPoint, NULL);
+#ifdef LG_SECURITY_USE_EXT_SBS_THREAD
+    pthread_create(&g_sbs_network_reader_thread, NULL, SbsNetworkReaderThread, NULL);
+#endif
 
     pthread_mutex_lock(&Modes.data_mutex);
     while(1) {

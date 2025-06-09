@@ -40,12 +40,16 @@ static int rotate_log_file_if_needed(size_t new_entry_size);
 // Opens a new log file based on current index
 static int open_new_log_file();
 
+pthread_mutex_t mutex_WriteLog = PTHREAD_MUTEX_INITIALIZER;
+
 /************************************************************ */
 /** Public APIs ********************************************* */
 /************************************************************ */
 // Writes an encrypted log message to the current file
 int WriteLog(const char *message)
 {
+    pthread_mutex_lock(&mutex_WriteLog);
+
     if (!g_log_fp)
         return -1;
 
@@ -82,6 +86,7 @@ int WriteLog(const char *message)
     char encoded[2048];
     if (base64_encode(combined, sizeof(combined), encoded, sizeof(encoded)) != 0)
     {
+        pthread_mutex_unlock(&mutex_WriteLog);
         return -1;
     }
 
@@ -90,13 +95,14 @@ int WriteLog(const char *message)
     {
         // If we can't open new log file.
         // FIXME later
+        pthread_mutex_unlock(&mutex_WriteLog);
         return -1;
     }
 
     // Write to file (1 line per entry)
     fprintf(g_log_fp, "%s\n", encoded);
     fflush(g_log_fp);
-    printf("%s", numbered_msg);
+    //printf("%s", numbered_msg);
 
     // Save full log file hash (not just last line)
     if (save_logfile_hash() != 0)
@@ -105,6 +111,7 @@ int WriteLog(const char *message)
         // FIXME: handle failure
     }
 
+    pthread_mutex_unlock(&mutex_WriteLog);
     return 0;
 }
 
@@ -613,7 +620,7 @@ static int load_key(const char *pcFile, unsigned char *pKeyBuf)
 {
     char key_path[512];
 
-    printf("key file=%s\n", pcFile);
+    //printf("key file=%s\n", pcFile);
     // Use default path if pcFile is NULL
     if (pcFile == NULL)
     {
