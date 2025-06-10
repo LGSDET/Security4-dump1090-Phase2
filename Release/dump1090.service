@@ -1,0 +1,12 @@
+[Unit]
+Description=Dump1090 streaming ADS-B data streaming
+After=network.target
+
+[Service]
+ExecStart=/home/lg/dump1090/dump1090 --net --net-sbs-port 5002
+Restart=on-failure
+User=root
+
+[Install]
+WantedBy=multi-user.target
+

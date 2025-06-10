@@ -1,0 +1,11 @@
+[Unit]
+Description=Streaming Raw ADS-B data to adshub.org
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/adsbhub.sh
+Restart=on-failure
+User=root
+
+[Install]
+WantedBy=multi-user.target
