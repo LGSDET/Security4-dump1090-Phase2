@@ -28,23 +28,45 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef _WIN32
+  #include <winsock2.h>
+  #include <ws2tcpip.h>
+  #include "stubs/fcntl.h"
+#else
+  #include <sys/socket.h>
+  #include <netinet/in.h>
+  #include <netinet/tcp.h>
+  #include <arpa/inet.h>
+  #include <unistd.h>
+  #include <sys/un.h>
+  #include <netdb.h>
+  #include <fcntl.h>	
+#endif
+
+
 #include <sys/types.h>
-#include <sys/socket.h>
 #include <sys/stat.h>
-#include <sys/un.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <fcntl.h>
+
 #include <string.h>
-#include <netdb.h>
+
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 
 #include "anet.h"
-
+#ifdef _WIN32
+#define setsockopt(fd, level, optname, optval, optlen) \
+        setsockopt(fd, level, optname, (const char *)(optval), optlen)
+static inline int inet_aton(const char *cp, struct in_addr *inp) {
+    return inet_pton(AF_INET, cp, inp);
+}
+struct sockaddr_un {
+    short sun_family;
+    char sun_path[108];
+};
+#define AF_UNIX 1
+#define AF_LOCAL 1
+#endif
 static void anetSetError(char *err, const char *fmt, ...)
 {
     va_list ap;

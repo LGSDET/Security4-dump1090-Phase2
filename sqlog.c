@@ -2,6 +2,7 @@
 #include <openssl/rand.h>
 #include <openssl/buffer.h>
 #include <openssl/hmac.h>
+#include <openssl/bio.h>
 #include <dirent.h>
 #include <stdio.h>
 #include <string.h>
@@ -12,7 +13,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include <ctype.h>
-
+#include <pthread.h>
 #include "sqlog.h"
 
 static unsigned char g_key[LOG_AES_KEY_LEN];
@@ -150,8 +151,9 @@ int SqLog(int log_level, const char *format, ...)
 
     // Get timestamp (yyyy-mm-dd hh:mm:ss.mmm)
     struct timeval tv;
-    gettimeofday(&tv, NULL);
-    struct tm *tm_info = localtime(&tv.tv_sec);
+	gettimeofday(&tv, NULL);
+
+	struct tm *tm_info = localtime((const time_t *)&tv.tv_sec);
 
     char time_str[32];
     strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", tm_info);

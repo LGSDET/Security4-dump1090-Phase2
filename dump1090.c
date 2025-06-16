@@ -29,7 +29,7 @@
  */
 
 #include <stdio.h>
-#include <string.h>
+//#include <string.h>
 #include <stdlib.h>
 #include <pthread.h>
 #include <stdint.h>
@@ -41,8 +41,20 @@
 #include <fcntl.h>
 #include <ctype.h>
 #include <sys/stat.h>
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>  // for inet_pton, inet_ntop
+#define strsignal(sig) "unknown-signal"
+  #define SIGQUIT 0
+  #define SIGHUP  0
+  #define SIGPIPE 0
+  #define SIGWINCH 0
+#else
 #include <sys/ioctl.h>
 #include <sys/select.h>
+#include <arpa/inet.h>
+#include <string.h>
+#endif
 #include "rtl-sdr.h"
 #include "anet.h"
 
@@ -57,9 +69,12 @@
 
 #ifdef LG_SECURITY_ENHANCEMENT_SQLOG
 #include "sqlog.h"
-#include <arpa/inet.h>    // inet_pton(), inet_ntop(), etc.
-#include <arpa/inet.h>
+#ifdef _WIN32
+
+#else
 #include <netinet/in.h>
+#endif
+
 #endif
 
 #define MODES_DEFAULT_RATE         2000000
@@ -270,7 +285,12 @@ void useModesMessage(struct modesMessage *mm);
 int fixSingleBitErrors(unsigned char *msg, int bits);
 int fixTwoBitsErrors(unsigned char *msg, int bits);
 int modesMessageLenByType(int type);
+
+#ifndef _WIN32
 void sigWinchCallback();
+#else
+void sigWinchCallback(int);
+#endif
 int getTermRows();
 
 #ifdef LG_SECURITY_USE_EXT_SBS_THREAD
@@ -2657,19 +2677,35 @@ void modesWaitReadableClients(int timeout_ms) {
 /* ============================ Terminal handling  ========================== */
 
 /* Handle resizing terminal. */
+#ifndef _WIN32
 void sigWinchCallback() {
     signal(SIGWINCH, SIG_IGN);
     Modes.interactive_rows = getTermRows();
     interactiveShowData();
     signal(SIGWINCH, sigWinchCallback);
 }
+#else
+void sigWinchCallback(int signum) {
+    signal(SIGWINCH, SIG_IGN);  // 일시적으로 무시
+    Modes.interactive_rows = getTermRows();
+    interactiveShowData();
+    signal(SIGWINCH, sigWinchCallback);  // 다시 등록
+}
+#endif
 
 /* Get the number of rows after the terminal changes size. */
-int getTermRows() {
+#ifdef _WIN32
+int getTermRows(void) {
+    return 24;  // Windows에서는 터미널 크기를 알 수 없으므로 더미값 반환
+}
+#else
+
+int getTermRows(void) {
     struct winsize w;
     ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
     return w.ws_row;
 }
+#endif
 
 /* ================================ Main ==================================== */
 

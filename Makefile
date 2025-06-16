@@ -1,10 +1,21 @@
 #CFLAGS?=-O2 -g -Wall -W $(shell pkg-config --cflags librtlsdr)
-CFLAGS?=-O2 -Wall -W $(shell pkg-config --cflags librtlsdr)
-LDLIBS+=$(shell pkg-config --libs librtlsdr) -lpthread -lm
+#CFLAGS?=-O2 -Wall -W $(shell pkg-config --cflags librtlsdr)
+#LDLIBS+=$(shell pkg-config --libs librtlsdr) -lpthread -lm
 #LG_SECURITY_ENHANCEMENT
-LDLIBS+=-lssl -lcrypto
+# 기존:
+# CFLAGS?=-O2 -g -Wall -W $(shell pkg-config --cflags librtlsdr)
+# 수정:
+CFLAGS?=-O2 -Wall -I. -Istubs
+
+LDLIBS+=-lpthread -lm -lssl -lcrypto
+# librtlsdr가 없다면 아래 줄은 주석
+# LDLIBS+=-lrtlsdr
+
 CC?=gcc
-PROGNAME=dump1090
+
+#LDLIBS+=-lssl -lcrypto
+#CC?=gcc
+PROGNAME=dump1090s
 
 all: dump1090 sqlog_viewer
 

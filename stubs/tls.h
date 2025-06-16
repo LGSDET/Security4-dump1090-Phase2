@@ -1,16 +1,12 @@
 #ifndef TLS_H
 #define TLS_H
-#define TLS_SERVER_PORT     30004
-#define TLS_SERVER_PORT_RAW 30005
-#include <openssl/ssl.h>
-//typedef int SSL_CTX;
-//typedef int SSL;
 
-#ifndef HAS_REAL_MYINITSSL
-static inline SSL_CTX * myInitSSL(void) { return 0; }
+typedef int SSL_CTX;
+typedef int SSL;
+
+//static inline SSL_CTX * myInitSSL(void) { return 0; }
 static inline int myFreeSSL(SSL_CTX *ctx, SSL *ssl) { return 0; }
 static inline int myAcceptSSL(SSL_CTX *ctx, int client_sock, SSL **ppSsl) { return 0; }
-#endif
 
 #define SSL_get_error(...) (0)
 #define ERR_print_errors_fp(...) ((void)0)

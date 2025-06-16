@@ -9,3 +9,8 @@ tclient
 tserver
 fclient
 lgess2025s4testlogkey.hex
+
+noservices.*
+noservices.prj_files/
+ADS-B-Dump1090.*
+ADS-B-Dump1090.prj_files/
