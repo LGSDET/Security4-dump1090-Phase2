@@ -2732,7 +2732,7 @@ void backgroundTasks(void) {
         Modes.interactive_last_update = mstime();
     }
 }
-
+#ifndef UNIT_TEST
 int main(int argc, char **argv) {
     int j;
 
@@ -2909,5 +2909,5 @@ int main(int argc, char **argv) {
     rtlsdr_close(Modes.dev);
     return 0;
 }
-
+#endif
 

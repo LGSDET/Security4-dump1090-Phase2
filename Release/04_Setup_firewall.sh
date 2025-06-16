@@ -36,17 +36,19 @@ ufw default allow outgoing
 ufw allow proto udp from any port 67 to any port 68
 
 # Allow SSH from IP(s)
-ufw allow from 192.168.43.238 to any port 22 proto tcp
-ufw allow from 192.168.43.91 to any port 22 proto tcp
-ufw allow from 192.168.43.69 to any port 22 proto tcp
+#ufw allow from 192.168.43.238 to any port 22 proto tcp
+#ufw allow from 192.168.43.91 to any port 22 proto tcp
+#ufw allow from 192.168.43.69 to any port 22 proto tcp
+ufw allow from 192.168.137.0/24 to any port 22 proto tcp
 
 # Deny SSH from all other sources
 ufw deny 22
 
 # Whitelisting individual IP addresses separately
-sudo ufw allow from 192.168.43.238
-sudo ufw allow from 192.168.43.69
-sudo ufw allow from 192.168.43.91
+#sudo ufw allow from 192.168.43.238
+#sudo ufw allow from 192.168.43.69
+#sudo ufw allow from 192.168.43.91
+sudo ufw allow from 192.168.137.0/24
 
 # === Optional Examples (CIDR block-based allow rules) ===
 # Allow IP range: 192.168.43.1 to 192.168.43.126 (subnet /25)

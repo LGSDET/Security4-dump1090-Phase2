@@ -86,6 +86,7 @@ int myAcceptSSL(SSL_CTX *ctx, int client_sock, SSL **ppSsl)
 }
 
 #ifdef TLS_TEST
+#ifndef UNIT_TEST
 int main(int argc, char *argv[])
 {
     int tls_server_port = TLS_SERVER_PORT;
@@ -178,6 +179,7 @@ int main(int argc, char *argv[])
     myFreeSSL(ctx, ssl);
     return 0;
 }
+#endif
 #endif
 
 int myFreeSSL(SSL_CTX *ctx, SSL *ssl)
