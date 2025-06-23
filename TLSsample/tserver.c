@@ -184,8 +184,8 @@ int main(int argc, char *argv[])
 
 int myFreeSSL(SSL_CTX *ctx, SSL *ssl)
 {
-    SSL_shutdown(ssl);
-    SSL_free(ssl);
-    SSL_CTX_free(ctx);
+    if (ssl) SSL_shutdown(ssl);
+    if (ssl) SSL_free(ssl);
+    if (ctx) SSL_CTX_free(ctx);
     return 0;
 }
