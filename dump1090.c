@@ -45,6 +45,7 @@
 #include <sys/select.h>
 #include "rtl-sdr.h"
 #include "anet.h"
+#include "dump1090.h"
 
 #define LG_SECURITY_ENHANCEMENT
 #define LG_SECURITY_ENHANCEMENT_TLS
@@ -99,7 +100,7 @@
 #define MODES_INTERACTIVE_ROWS 15               /* Rows on screen */
 #define MODES_INTERACTIVE_TTL 60                /* TTL before being removed */
 
-#define MODES_NET_MAX_FD 1024
+
 #ifdef LG_SECURITY_ENHANCEMENT_TLS
 // 4343
 #define MODES_NET_OUTPUT_TLSBS_PORT TLS_SERVER_PORT
@@ -109,18 +110,12 @@
 #define MODES_NET_OUTPUT_RAW_PORT 30002
 #define MODES_NET_INPUT_RAW_PORT 30001
 #define MODES_NET_HTTP_PORT 8080
-#define MODES_CLIENT_BUF_SIZE 1024
+
 #define MODES_NET_SNDBUF_SIZE (1024*64)
 
 #define MODES_NOTUSED(V) ((void) V)
 
-/* Structure used to describe a networking client. */
-struct client {
-    int fd;         /* File descriptor. */
-    int service;    /* TCP port the client is connected to. */
-    char buf[MODES_CLIENT_BUF_SIZE+1];    /* Read buffer. */
-    int buflen;                         /* Amount of data on buffer. */
-};
+
 
 /* Structure used to describe an aircraft in iteractive mode. */
 struct aircraft {
@@ -143,79 +138,7 @@ struct aircraft {
     struct aircraft *next; /* Next aircraft in our linked list. */
 };
 
-/* Program global state. */
-struct {
-    /* Internal state */
-    pthread_t reader_thread;
-    pthread_mutex_t data_mutex;     /* Mutex to synchronize buffer access. */
-    pthread_cond_t data_cond;       /* Conditional variable associated. */
-    unsigned char *data;            /* Raw IQ samples buffer */
-    uint16_t *magnitude;            /* Magnitude vector */
-    uint32_t data_len;              /* Buffer length. */
-    int fd;                         /* --ifile option file descriptor. */
-    int data_ready;                 /* Data ready to be processed. */
-    uint32_t *icao_cache;           /* Recently seen ICAO addresses cache. */
-    uint16_t *maglut;               /* I/Q -> Magnitude lookup table. */
-    int exit;                       /* Exit from the main loop when true. */
 
-    /* RTLSDR */
-    int dev_index;
-    int gain;
-    int enable_agc;
-    rtlsdr_dev_t *dev;
-    int freq;
-
-    /* Networking */
-    char aneterr[ANET_ERR_LEN];
-    struct client *clients[MODES_NET_MAX_FD]; /* Our clients. */
-#ifdef LG_SECURITY_ENHANCEMENT_TLS
-    SSL_CTX *ctx;
-    SSL *ssl[MODES_NET_MAX_FD]; /* SSL **/
-#endif
-    int maxfd;                      /* Greatest fd currently active. */
-#ifdef LG_SECURITY_ENHANCEMENT_TLS
-    int tlros; /* TLS-Raw output listening socket. */
-    int tlsbsos; /* TLS-SBS output listening socket. */
-#endif
-    int sbsos;                      /* SBS output listening socket. */
-    int ros;                        /* Raw output listening socket. */
-    int ris;                        /* Raw input listening socket. */
-    int https;                      /* HTTP listening socket. */
-
-    /* Configuration */
-    char *filename;                 /* Input form file, --ifile option. */
-    int loop;                       /* Read input file again and again. */
-    int fix_errors;                 /* Single bit error correction if true. */
-    int check_crc;                  /* Only display messages with good CRC. */
-    int raw;                        /* Raw output format. */
-    int debug;                      /* Debugging mode. */
-    int net;                        /* Enable networking. */
-    int net_only;                   /* Enable just networking. */
-    int interactive;                /* Interactive mode */
-    int interactive_rows;           /* Interactive mode: max number of rows. */
-    int interactive_ttl;            /* Interactive mode: TTL before deletion. */
-    int stats;                      /* Print stats at exit in --ifile mode. */
-    int onlyaddr;                   /* Print only ICAO addresses. */
-    int metric;                     /* Use metric units. */
-    int aggressive;                 /* Aggressive detection algorithm. */
-
-    /* Interactive mode */
-    struct aircraft *aircrafts;
-    long long interactive_last_update;  /* Last screen update in milliseconds */
-
-    /* Statistics */
-    long long stat_valid_preamble;
-    long long stat_demodulated;
-    long long stat_goodcrc;
-    long long stat_badcrc;
-    long long stat_fixed;
-    long long stat_single_bit_fix;
-    long long stat_two_bits_fix;
-    long long stat_http_requests;
-    long long stat_sbs_connections;
-
-    long long stat_out_of_phase;
-} Modes;
 
 /* The struct we use to store information about a decoded message. */
 struct modesMessage {
@@ -262,6 +185,8 @@ struct modesMessage {
     int altitude, unit;
 };
 
+struct modesStruct Modes;
+
 void interactiveShowData(void);
 struct aircraft* interactiveReceiveData(struct modesMessage *mm);
 void modesSendRawOutput(struct modesMessage *mm);
@@ -307,6 +232,30 @@ void SqLog_setup_signal_handlers() {
     // Add more if needed
 }
 #endif
+
+/* for unit test    */
+int (*anetTcpServer_ptr)(char*, int, char*) = anetTcpServer;
+int (*anetNonBlock_ptr)(char*, int) = anetNonBlock;
+SSL_CTX* (*myInitSSL_ptr)(void) = myInitSSL;
+
+int (*anetTcpAccept_ptr)(char*, int, char*, int*) = anetTcpAccept;
+int (*myAcceptSSL_ptr)(SSL_CTX*, int, SSL**) = myAcceptSSL;
+int (*SSL_get_error_ptr)(const SSL*, int) = SSL_get_error;
+int (*SSL_shutdown_ptr)(SSL*) = SSL_shutdown;
+void (*SSL_free_ptr)(SSL*) = SSL_free;
+int (*anetSetSendBuffer_ptr)(char*, int, int) = anetSetSendBuffer;
+int (*close_ptr)(int) = close;
+int (*getpeername_ptr)(int, struct sockaddr*, socklen_t*) = getpeername;
+
+ssize_t (*write_ptr)(int, const void*, size_t) = write;
+int (*SSL_write_ptr)(SSL*, const void*, int) = SSL_write;
+
+#ifdef UNIT_TEST
+#define SqLog_I(...) ((void)0)
+#define SqLog_W(...) ((void)0)
+#define SqLog_E(...) ((void)0)
+#endif
+
 /* =============================== Initialization =========================== */
 
 void modesInitConfig(void) {
@@ -2006,15 +1955,15 @@ void modesInitNet(void) {
         if ((modesNetServices[j].socket == &Modes.tlros) || (modesNetServices[j].socket == &Modes.tlsbsos))
         {
             SqLog_I("modesInitNet server[%d] port[%d]\n", j, modesNetServices[j].port);
-            s = anetTcpServer(Modes.aneterr, modesNetServices[j].port, NULL);
+            s = anetTcpServer_ptr(Modes.aneterr, modesNetServices[j].port, NULL);
         }
         else
         {
-            s = anetTcpServer(Modes.aneterr, modesNetServices[j].port, "127.0.0.1");
+            s = anetTcpServer_ptr(Modes.aneterr, modesNetServices[j].port, "127.0.0.1");
             SqLog_I("modesInitNet server[%d] port[%d] for local access\n", j, modesNetServices[j].port);
         }
 #else
-        int s = anetTcpServer(Modes.aneterr, modesNetServices[j].port, NULL);
+        int s = anetTcpServer_ptr(Modes.aneterr, modesNetServices[j].port, NULL);
 #endif
         if (s == -1) {
             fprintf(stderr, "Error opening the listening port %d (%s): %s\n",
@@ -2023,12 +1972,12 @@ void modesInitNet(void) {
                 strerror(errno));
             exit(1);
         }
-        anetNonBlock(Modes.aneterr, s);
+        anetNonBlock_ptr(Modes.aneterr, s);
         *modesNetServices[j].socket = s;
     }
 
 #ifdef LG_SECURITY_ENHANCEMENT_TLS
-    Modes.ctx = myInitSSL();
+    Modes.ctx = myInitSSL_ptr();
 #endif
     signal(SIGPIPE, SIG_IGN);
 }
@@ -2048,7 +1997,7 @@ void modesAcceptClients(void) {
 #endif
 
     for (j = 0; j < MODES_NET_SERVICES_NUM; j++) {
-        fd = anetTcpAccept(Modes.aneterr, *modesNetServices[j].socket,
+        fd = anetTcpAccept_ptr(Modes.aneterr, *modesNetServices[j].socket,
                            NULL, &port);
         if (fd == -1) {
             if (Modes.debug & MODES_DEBUG_NET && errno != EAGAIN)
@@ -2058,7 +2007,7 @@ void modesAcceptClients(void) {
         }
 
 #ifdef LG_SECURITY_ENHANCEMENT_SQLOG
-        if (getpeername(fd, (struct sockaddr *)&addr, &addr_len) == 0)
+        if (getpeername_ptr(fd, (struct sockaddr *)&addr, &addr_len) == 0)
         {
             inet_ntop(AF_INET, &addr.sin_addr, ip_str, sizeof(ip_str));
         }
@@ -2069,17 +2018,18 @@ void modesAcceptClients(void) {
 #ifdef LG_SECURITY_ENHANCEMENT_SQLOG
             SqLog_E("Max FD reached. FD=%d, Close TCP_accept from %s:%d\n", fd, ip_str, port);
 #endif
-            close(fd);
+            close_ptr(fd);
             return; /* Max number of clients reached. */
         }
 
         anetNonBlock(Modes.aneterr, fd);
         c = malloc(sizeof(*c));
+        printf("RAW client created: fd=%d, ptr=%p\n", fd, c);
         c->service = *modesNetServices[j].socket;
         c->fd = fd;
         c->buflen = 0;
         Modes.clients[fd] = c;
-        anetSetSendBuffer(Modes.aneterr,fd,MODES_NET_SNDBUF_SIZE);
+        anetSetSendBuffer_ptr(Modes.aneterr,fd,MODES_NET_SNDBUF_SIZE);
 
 
 
@@ -2106,24 +2056,29 @@ void modesAcceptClients(void) {
             {
                 Modes.stat_sbs_connections++; // TLS SBS is one of the sbs connections
             }
-            iRet = myAcceptSSL(Modes.ctx, fd, &Modes.ssl[fd]);
+            iRet = myAcceptSSL_ptr(Modes.ctx, fd, &Modes.ssl[fd]);
             printf("myAcceptSS(%p, fd=%d, ssl[%d]=%p) return %d\n", Modes.ctx, fd, fd, Modes.ssl[fd], iRet);
 
             if (iRet <= 0)
             {
 #ifdef LG_SECURITY_ENHANCEMENT_SQLOG
-                int iErr = SSL_get_error(Modes.ssl[fd], iRet);
-                SqLog_W("myAcceptSSL(%d, %p) failed, %s:%d return %d err=%d\n",
+                int iErr = SSL_get_error_ptr(Modes.ssl[fd], iRet);
+                SqLog_W("myAcceptSSL_ptr(%d, %p) failed, %s:%d return %d err=%d\n",
                         fd, Modes.ssl[fd], ip_str, port, iRet, iErr);
 #endif
                 fprintf(stderr, "SSL_accept failed\n");
                 ERR_print_errors_fp(stderr);
-                close(fd);
+                close_ptr(fd);
+
+                // [추가] 클라이언트 메모리 해제 및 NULL 처리
+                free(Modes.clients[fd]);
+                Modes.clients[fd] = NULL;
+                continue; // 다음 클라이언트 처리
             }
             else
             {
 #ifdef LG_SECURITY_ENHANCEMENT_SQLOG
-                SqLog_I("myAcceptSSL(%d, %p) succeeded from %s:%d\n",
+                SqLog_I("myAcceptSSL_ptr(%d, %p) succeeded from %s:%d\n",
                         fd, Modes.ssl[fd], ip_str, port);
 
 #endif
@@ -2163,20 +2118,20 @@ void modesFreeClient(int fd) {
     if (Modes.ssl[fd] != NULL)
     {
         SqLog_I("Closing port TLS port[%p]\n", Modes.ssl[fd]);
-        int shutdown_ret = SSL_shutdown(Modes.ssl[fd]);
+        int shutdown_ret = SSL_shutdown_ptr(Modes.ssl[fd]);
         if (shutdown_ret == 0)
         {
             // First call returns 0 → call again to complete bidirectional shutdown
-            shutdown_ret = SSL_shutdown(Modes.ssl[fd]);
+            shutdown_ret = SSL_shutdown_ptr(Modes.ssl[fd]);
         }
     };
 #endif
-    close(fd);
+    close_ptr(fd);
     free(Modes.clients[fd]);
 #ifdef LG_SECURITY_ENHANCEMENT_TLS
     if(Modes.ssl[fd] != NULL)
     {
-       SSL_free(Modes.ssl[fd]); // Free SSL object
+       SSL_free_ptr(Modes.ssl[fd]); // Free SSL object
        Modes.ssl[fd] = NULL;
     };
 #endif
@@ -2222,12 +2177,13 @@ void modesSendAllClients(int service, void *msg, int len) {
         if (c && c->service == service) {
 #ifdef LG_SECURITY_ENHANCEMENT_TLS
             int nwritten;
-            if ((service == Modes.tlsbsos) || (service == Modes.tlros))
+            // if ((service == Modes.tlsbsos) || (service == Modes.tlros))
+            if(Modes.ssl[j] != NULL)
             {
-                nwritten = SSL_write(Modes.ssl[j], msg, len);
+                nwritten = SSL_write_ptr(Modes.ssl[j], msg, len);
                 if(nwritten <= 0)
                 {
-                    int err = SSL_get_error(Modes.ssl[j], nwritten);
+                    int err = SSL_get_error_ptr(Modes.ssl[j], nwritten);
                     SqLog_E("SSL_write(fd=%d) failed: %d\n", j, err);
                 }
                 if (nwritten != len) {
@@ -2236,13 +2192,13 @@ void modesSendAllClients(int service, void *msg, int len) {
             }
             else
             {
-                nwritten = write(j, msg, len);
+                nwritten = write_ptr(j, msg, len);
                 if (nwritten != len) {
                     modesFreeClient(j);
                 }
             }
 #else
-            int nwritten = write(j, msg, len);
+            int nwritten = write_ptr(j, msg, len);
             if (nwritten != len) {
                 modesFreeClient(j);
             }
@@ -2506,7 +2462,7 @@ int handleHTTPRequest(struct client *c) {
                 strerror(errno));
             content = strdup(buf);
         }
-        if (fd != -1) close(fd);
+        if (fd != -1) close_ptr(fd);
         ctype = MODES_CONTENT_TYPE_HTML;
     }
 
@@ -2527,8 +2483,8 @@ int handleHTTPRequest(struct client *c) {
         printf("HTTP Reply header:\n%s", hdr);
 
     /* Send header and content. */
-    if (write(c->fd, hdr, hdrlen) != hdrlen ||
-        write(c->fd, content, clen) != clen)
+    if (write_ptr(c->fd, hdr, hdrlen) != hdrlen ||
+        write_ptr(c->fd, content, clen) != clen)
     {
         free(content);
         return 1;
