@@ -15,7 +15,7 @@
 
 #include "sqlog.h"
 
-static unsigned char g_key[LOG_AES_KEY_LEN];
+unsigned char g_key[LOG_AES_KEY_LEN];
 static FILE *g_log_fp = NULL;
 static char g_current_log_filename[512] = {0};
 static char g_current_hash_filename[512] = {0};
@@ -23,21 +23,24 @@ static unsigned int g_log_msg_num = 0;
 static const char *g_log_file_path = LOG_FILE_PATH;
 static const char *g_log_file_base_name = LOG_FILE_BASE_NAME;
 
-static int hex_to_bin(const char *hex, unsigned char *bin, size_t bin_len);
-static int load_key(const char *pcFile, unsigned char *pKeyBuf);
-static int base64_encode(const unsigned char *in, size_t in_len, char *out, const unsigned int out_len);
-static int base64_decode(const char *in, unsigned char *out, unsigned int *out_len);
-static int decrypt_gcm(const unsigned char *key,
+// Function declarations for testing purposes
+int hex_to_bin(const char *hex, unsigned char *bin, size_t bin_len);
+int load_key(const char *pcFile, unsigned char *pKeyBuf);
+int base64_encode(const unsigned char *in, size_t in_len, char *out, const unsigned int out_len);
+int base64_decode(const char *in, unsigned char *out, unsigned int *out_len);
+int decrypt_gcm(const unsigned char *key,
                        const unsigned char *data,
                        size_t data_len,
                        char *plaintext_out,
                        size_t plaintext_max);
-static int save_logfile_hmac(void);
+int save_logfile_hmac(void);
 
 // Rename current log to .NNN and start fresh
-static int rotate_log_file_if_needed(size_t new_entry_size);
+int rotate_log_file_if_needed(size_t new_entry_size);
 // Opens a new log file based on current index
-static int open_new_log_file();
+int open_new_log_file(void);
+long get_file_size(const char *filename);
+int get_max_log_index(void);
 
 pthread_mutex_t mutex_WriteLog = PTHREAD_MUTEX_INITIALIZER;
 
@@ -214,7 +217,7 @@ void SqLog_LogStart(int argc, char *argv[])
     else
     {
         strncpy(exe_path, argv[0], sizeof(exe_path));
-        exe_path[sizeof(exe_path) - 1] = '\0';
+        exe_path[sizeof(exe_path) - 1] = '\0';        
     }
 
     // Make whole command line string
@@ -226,6 +229,7 @@ void SqLog_LogStart(int argc, char *argv[])
             strcat(cmdline, " ");
     }
 
+ 
     // Commit to the log
     SqLog_I("Newly started\n");
     SqLog_I("Executable Path: %s\n", exe_path);
@@ -419,7 +423,7 @@ void SqLog_CloseFiles(void)
 /************************************************************ */
 
 // Returns current log file size
-static long get_file_size(const char *filename)
+long get_file_size(const char *filename)
 {
     struct stat st;
     if (stat(filename, &st) != 0)
@@ -428,7 +432,7 @@ static long get_file_size(const char *filename)
 }
 
 // Find the highest existing log file index: dump1090.log.001, .002, ...
-static int get_max_log_index()
+int get_max_log_index()
 {
     DIR *dir = opendir(g_log_file_path); // g_log_file_path는 디렉터리 경로
     if (!dir)
@@ -462,7 +466,7 @@ static int get_max_log_index()
 }
 
 // Rename current log to .NNN and start fresh
-static int rotate_log_file_if_needed(size_t new_entry_size)
+int rotate_log_file_if_needed(size_t new_entry_size)
 {
     long size = get_file_size(g_current_log_filename);
     if (size + new_entry_size < LOG_FILE_SIZE)
@@ -490,7 +494,7 @@ static int rotate_log_file_if_needed(size_t new_entry_size)
 }
 
 // Opens a new log file based on current index
-static int open_new_log_file()
+int open_new_log_file()
 {
     g_log_msg_num = 0; // Initialize message number
     g_log_fp = fopen(g_current_log_filename, "ab");
@@ -498,7 +502,7 @@ static int open_new_log_file()
     return (g_log_fp) ? 0 : -1;
 }
 
-static int save_logfile_hmac(void)
+int save_logfile_hmac(void)
 {
     FILE *rfp = fopen(g_current_log_filename, "rb");
     if (!rfp)
@@ -579,7 +583,7 @@ static int save_logfile_hmac(void)
 /************************************************************ */
 /** Key handling ******************************************** */
 /************************************************************ */
-static int load_key(const char *pcFile, unsigned char *pKeyBuf)
+int load_key(const char *pcFile, unsigned char *pKeyBuf)
 {
     char key_path[512];
 
@@ -616,7 +620,7 @@ static int load_key(const char *pcFile, unsigned char *pKeyBuf)
 /** Base64 ************************************************** */
 /************************************************************ */
 
-static int base64_encode(const unsigned char *in, size_t in_len, char *out, const unsigned int out_len)
+int base64_encode(const unsigned char *in, size_t in_len, char *out, const unsigned int out_len)
 {
     BIO *bio, *b64;
     BUF_MEM *buffer_ptr;
@@ -643,7 +647,7 @@ static int base64_encode(const unsigned char *in, size_t in_len, char *out, cons
     return 0;
 }
 
-static int base64_decode(const char *in, unsigned char *out, unsigned int *out_len)
+int base64_decode(const char *in, unsigned char *out, unsigned int *out_len)
 {
     BIO *bio, *b64;
     int decoded_len;
@@ -654,6 +658,7 @@ static int base64_decode(const char *in, unsigned char *out, unsigned int *out_l
     BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL); // No newlines
 
     decoded_len = BIO_read(bio, out, *out_len);
+    //fprintf(stderr, "Decoded length: %d\n", decoded_len);
     if (decoded_len < 0)
     {
         BIO_free_all(bio);
@@ -666,7 +671,7 @@ static int base64_decode(const char *in, unsigned char *out, unsigned int *out_l
 }
 
 // Converts hex string to binary buffer
-static int hex_to_bin(const char *hex, unsigned char *bin, size_t bin_len)
+int hex_to_bin(const char *hex, unsigned char *bin, size_t bin_len)
 {
     for (size_t i = 0; i < bin_len; ++i)
     {
@@ -681,7 +686,7 @@ static int hex_to_bin(const char *hex, unsigned char *bin, size_t bin_len)
 /************************************************************ */
 
 // Decrypts a GCM-encrypted log entry
-static int decrypt_gcm(const unsigned char *key,
+int decrypt_gcm(const unsigned char *key,
                        const unsigned char *data,
                        size_t data_len,
                        char *plaintext_out,
